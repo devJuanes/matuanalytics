@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Paws & Whiskers — Blog de gatitos y animales</title>
+  <script src="http://localhost:3001/tracker.js" data-site-id="MA-340D78819AB5"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --cream: #fff8f0;
+      --peach: #ffd6c9;
+      --coral: #ff8a7a;
+      --rose: #e85d75;
+      --brown: #5c4033;
+      --soft-brown: #8b6f5e;
+      --mint: #b8e8d8;
+      --lavender: #e8dff5;
+      --shadow: 0 8px 32px rgba(92, 64, 51, 0.1);
+      --radius: 20px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--cream);
+      color: var(--brown);
+      line-height: 1.7;
+    }
+
+    /* Header */
+    .header {
+      background: linear-gradient(135deg, var(--peach) 0%, var(--lavender) 50%, var(--mint) 100%);
+      padding: 1rem 2rem;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: var(--shadow);
+    }
+
+    .nav {
+      max-width: 1100px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-size: 1.4rem;
+      font-weight: 800;
+      color: var(--brown);
+      text-decoration: none;
+    }
+
+    .logo-icon {
+      width: 42px;
+      height: 42px;
+      background: white;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      box-shadow: var(--shadow);
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 1.5rem;
+      list-style: none;
+    }
+
+    .nav-links a {
+      color: var(--soft-brown);
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.95rem;
+      transition: color 0.2s;
+    }
+
+    .nav-links a:hover { color: var(--rose); }
+
+    /* Hero */
+    .hero {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 4rem 2rem 3rem;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 3rem;
+      align-items: center;
+    }
+
+    @media (max-width: 768px) {
+      .hero { grid-template-columns: 1fr; text-align: center; }
+    }
+
+    .hero-badge {
+      display: inline-block;
+      background: white;
+      color: var(--rose);
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding: 0.4rem 1rem;
+      border-radius: 999px;
+      margin-bottom: 1rem;
+      box-shadow: var(--shadow);
+    }
+
+    .hero h1 {
+      font-size: clamp(2.2rem, 5vw, 3.2rem);
+      line-height: 1.15;
+      margin-bottom: 1rem;
+      color: var(--brown);
+    }
+
+    .hero h1 span { color: var(--coral); }
+
+    .hero p {
+      font-size: 1.1rem;
+      color: var(--soft-brown);
+      margin-bottom: 1.5rem;
+      max-width: 480px;
+    }
+
+    @media (max-width: 768px) {
+      .hero p { margin-left: auto; margin-right: auto; }
+    }
+
+    .hero-cta {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: var(--rose);
+      color: white;
+      padding: 0.85rem 1.75rem;
+      border-radius: 999px;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 1rem;
+      transition: transform 0.2s, box-shadow 0.2s;
+      box-shadow: 0 4px 20px rgba(232, 93, 117, 0.35);
+    }
+
+    .hero-cta:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 28px rgba(232, 93, 117, 0.45);
+    }
+
+    .hero-visual {
+      position: relative;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .hero-card {
+      background: white;
+      border-radius: var(--radius);
+      padding: 2rem;
+      box-shadow: var(--shadow);
+      text-align: center;
+      max-width: 320px;
+      position: relative;
+      z-index: 2;
+    }
+
+    .hero-paw {
+      font-size: 5rem;
+      line-height: 1;
+      margin-bottom: 0.5rem;
+      filter: drop-shadow(0 4px 8px rgba(0,0,0,0.08));
+    }
+
+    .hero-card p {
+      font-size: 0.95rem;
+      color: var(--soft-brown);
+    }
+
+    .blob {
+      position: absolute;
+      border-radius: 50%;
+      opacity: 0.5;
+      z-index: 1;
+    }
+
+    .blob-1 { width: 200px; height: 200px; background: var(--peach); top: -20px; right: 0; }
+    .blob-2 { width: 150px; height: 150px; background: var(--mint); bottom: -30px; left: 20px; }
+
+    /* Section */
+    .section {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 3rem 2rem;
+    }
+
+    .section-title {
+      text-align: center;
+      margin-bottom: 2.5rem;
+    }
+
+    .section-title h2 {
+      font-size: 2rem;
+      color: var(--brown);
+      margin-bottom: 0.5rem;
+    }
+
+    .section-title p {
+      color: var(--soft-brown);
+      font-size: 1.05rem;
+    }
+
+    /* Cards grid */
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 1.75rem;
+    }
+
+    .card {
+      background: white;
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      transition: transform 0.25s, box-shadow 0.25s;
+    }
+
+    .card:hover {
+      transform: translateY(-6px);
+      box-shadow: 0 16px 48px rgba(92, 64, 51, 0.14);
+    }
+
+    .card-img {
+      height: 180px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 4rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card-img.cat { background: linear-gradient(160deg, #ffe8e0, #ffd0c8); }
+    .card-img.dog { background: linear-gradient(160deg, #e8f4e8, #c8e8d8); }
+    .card-img.bunny { background: linear-gradient(160deg, #f0e8ff, #e0d0f8); }
+    .card-img.bird { background: linear-gradient(160deg, #e8f4ff, #c8e0ff); }
+    .card-img.hamster { background: linear-gradient(160deg, #fff8e0, #ffe8c0); }
+    .card-img.fish { background: linear-gradient(160deg, #e0f8ff, #b8e8f8); }
+
+    .card-body { padding: 1.5rem; }
+
+    .card-tag {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--rose);
+      background: #fff0f2;
+      padding: 0.25rem 0.65rem;
+      border-radius: 999px;
+      margin-bottom: 0.75rem;
+    }
+
+    .card-body h3 {
+      font-size: 1.2rem;
+      margin-bottom: 0.5rem;
+      color: var(--brown);
+    }
+
+    .card-body p {
+      font-size: 0.92rem;
+      color: var(--soft-brown);
+      margin-bottom: 1rem;
+    }
+
+    .card-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.8rem;
+      color: #aaa;
+    }
+
+    .read-more {
+      color: var(--coral);
+      font-weight: 700;
+      text-decoration: none;
+      font-size: 0.85rem;
+    }
+
+    .read-more:hover { text-decoration: underline; }
+
+    /* Tips banner */
+    .tips {
+      background: linear-gradient(135deg, var(--brown) 0%, #7a5c4a 100%);
+      color: white;
+      border-radius: var(--radius);
+      padding: 2.5rem;
+      margin: 2rem 0;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+      align-items: center;
+    }
+
+    @media (max-width: 640px) {
+      .tips { grid-template-columns: 1fr; }
+    }
+
+    .tips h2 {
+      font-size: 1.6rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .tips p { opacity: 0.9; font-size: 0.95rem; }
+
+    .tips-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .tips-list li {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      background: rgba(255,255,255,0.1);
+      padding: 0.85rem 1rem;
+      border-radius: 12px;
+      font-size: 0.9rem;
+    }
+
+    .tips-list li span { font-size: 1.2rem; flex-shrink: 0; }
+
+    /* Gallery strip */
+    .gallery {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+
+    @media (max-width: 640px) {
+      .gallery { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    .gallery-item {
+      aspect-ratio: 1;
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2.5rem;
+      transition: transform 0.2s;
+      cursor: default;
+    }
+
+    .gallery-item:hover { transform: scale(1.05); }
+
+    .g1 { background: #ffe0e8; }
+    .g2 { background: #e0f0e8; }
+    .g3 { background: #e8e0ff; }
+    .g4 { background: #fff0d8; }
+
+    /* Footer */
+    .footer {
+      background: var(--brown);
+      color: rgba(255,255,255,0.85);
+      text-align: center;
+      padding: 2.5rem 2rem;
+      margin-top: 3rem;
+      font-size: 0.9rem;
+    }
+
+    .footer strong { color: white; }
+    .footer p { margin-top: 0.5rem; opacity: 0.7; font-size: 0.8rem; }
+  </style>
+</head>
+<body>
+
+  <header class="header">
+    <nav class="nav">
+      <a href="#" class="logo">
+        <span class="logo-icon">🐾</span>
+        Paws & Whiskers
+      </a>
+      <ul class="nav-links">
+        <li><a href="#articulos">Artículos</a></li>
+        <li><a href="#consejos">Consejos</a></li>
+        <li><a href="#galeria">Galería</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <section class="hero">
+    <div>
+      <span class="hero-badge">Blog de mascotas</span>
+      <h1>Historias dulces de <span>gatitos</span> y animales</h1>
+      <p>Curiosidades, cuidados y momentos adorables del mundo animal. Porque cada patita merece ser celebrada.</p>
+      <a href="#articulos" class="hero-cta">Explorar artículos</a>
+    </div>
+    <div class="hero-visual">
+      <div class="blob blob-1"></div>
+      <div class="blob blob-2"></div>
+      <div class="hero-card">
+        <div class="hero-paw">🐱</div>
+        <p><strong>+2.400</strong> amantes de los animales leen nuestro blog cada mes</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="articulos">
+    <div class="section-title">
+      <h2>Últimos artículos</h2>
+      <p>Todo lo que necesitas saber sobre tus compañeros peludos</p>
+    </div>
+
+    <div class="cards">
+      <article class="card">
+        <div class="card-img cat">🐱</div>
+        <div class="card-body">
+          <span class="card-tag">Gatitos</span>
+          <h3>5 señales de que tu gato te quiere</h3>
+          <p>Desde el ronroneo hasta el suave headbutt, descifra el lenguaje del amor felino y fortalece vuestro vínculo.</p>
+          <div class="card-meta">
+            <span>Hace 2 días</span>
+            <a href="#" class="read-more">Leer más</a>
+          </div>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="card-img dog">🐶</div>
+        <div class="card-body">
+          <span class="card-tag">Perros</span>
+          <h3>Paseos felices: guía para principiantes</h3>
+          <p>El paseo perfecto no es solo ejercicio: es exploración, socialización y diversión para tu mejor amigo.</p>
+          <div class="card-meta">
+            <span>Hace 4 días</span>
+            <a href="#" class="read-more">Leer más</a>
+          </div>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="card-img bunny">🐰</div>
+        <div class="card-body">
+          <span class="card-tag">Conejos</span>
+          <h3>¿Conejo en casa? Espacio y alimentación</h3>
+          <p>Los conejos son sociables e inteligentes. Te contamos cómo preparar un hogar seguro y acogedor para ellos.</p>
+          <div class="card-meta">
+            <span>Hace 1 semana</span>
+            <a href="#" class="read-more">Leer más</a>
+          </div>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="card-img bird">🐦</div>
+        <div class="card-body">
+          <span class="card-tag">Aves</span>
+          <h3>Cantos del amanecer: aves en el hogar</h3>
+          <p>Las aves traen color y melodía a cualquier hogar. Aprende los básicos de su cuidado y enriquecimiento.</p>
+          <div class="card-meta">
+            <span>Hace 1 semana</span>
+            <a href="#" class="read-more">Leer más</a>
+          </div>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="card-img hamster">🐹</div>
+        <div class="card-body">
+          <span class="card-tag">Roedores</span>
+          <h3>Hámsters nocturnos: rutina y juegos</h3>
+          <p>Pequeños pero llenos de personalidad. Ruedas, túneles y premios: así mantienes a tu hámster activo y feliz.</p>
+          <div class="card-meta">
+            <span>Hace 2 semanas</span>
+            <a href="#" class="read-more">Leer más</a>
+          </div>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="card-img fish">🐠</div>
+        <div class="card-body">
+          <span class="card-tag">Acuario</span>
+          <h3>Acuario zen: peces para relajarte</h3>
+          <p>El movimiento suave del agua y los colores de los peces crean un rincón de paz en cualquier habitación.</p>
+          <div class="card-meta">
+            <span>Hace 2 semanas</span>
+            <a href="#" class="read-more">Leer más</a>
+          </div>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <section class="section" id="consejos">
+    <div class="tips">
+      <div>
+        <h2>Consejos rápidos para dueños felices</h2>
+        <p>Un animal bien cuidado es un animal que te devuelve el cariño multiplicado. Estos tips marcan la diferencia.</p>
+      </div>
+      <ul class="tips-list">
+        <li><span>💧</span> Agua fresca siempre disponible, cambiada a diario</li>
+        <li><span>🩺</span> Visitas al veterinario al menos una vez al año</li>
+        <li><span>🎾</span> Juego diario: estimula cuerpo y mente</li>
+        <li><span>❤️</span> Caricias y tiempo juntos: el mejor regalo</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="section" id="galeria">
+    <div class="section-title">
+      <h2>Momentos adorables</h2>
+      <p>Una pizca de ternura para alegrar tu día</p>
+    </div>
+    <div class="gallery">
+      <div class="gallery-item g1">😺</div>
+      <div class="gallery-item g2">🐕</div>
+      <div class="gallery-item g3">🐇</div>
+      <div class="gallery-item g4">🦊</div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <strong>Paws & Whiskers</strong> — Blog de gatitos y animales
+    <p>Hecho con amor para los amantes de las mascotas · 2026</p>
+  </footer>
+
+</body>
+</html>
