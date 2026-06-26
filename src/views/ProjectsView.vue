@@ -153,7 +153,7 @@ async function openTrackingCode(project: Project) {
     <TrackingCodeModal
       v-if="selectedProject"
       :tracking-id="selectedProject.trackingId"
-      :tracking-code="selectedProject.trackingCode || `<script src=&quot;http://localhost:3001/tracker.js&quot; data-site-id=&quot;${selectedProject.trackingId}&quot;></script>`"
+        :tracking-code="selectedProject.trackingCode || `<script src=&quot;https://matuanalytics.matubyte.com/tracker.js&quot; data-site-id=&quot;${selectedProject.trackingId}&quot; async></script>`"
       @close="selectedProject = null"
     />
   </div>

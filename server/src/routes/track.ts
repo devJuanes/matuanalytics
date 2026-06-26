@@ -7,6 +7,16 @@ import type { ProjectRecord } from './projects.js'
 
 const router = Router()
 
+router.use((_req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+  next()
+})
+
+router.options('/track', (_req, res) => res.sendStatus(204))
+router.options('/heartbeat', (_req, res) => res.sendStatus(204))
+
 async function findProjectByTrackingId(trackingId: string): Promise<{ id: string; project: ProjectRecord } | null> {
   const db = await getDatabase()
   const snap = await db.ref('projects').once('value')
@@ -32,6 +42,7 @@ router.post('/track', async (req: Request, res: Response) => {
       screenResolution,
       language,
       referer,
+      skipPageview,
     } = req.body
 
     if (!siteId || !visitorId || !sessionId) {
@@ -76,7 +87,12 @@ router.post('/track', async (req: Request, res: Response) => {
     if (isNewVisitor) {
       await db.ref(`visitors/${projectId}/${visitorId}`).set(visitorData)
     } else {
-      await db.ref(`visitors/${projectId}/${visitorId}`).update(visitorData)
+      const existing = visitorSnap.val() as { country?: string } | null
+      const geoUpdate =
+        existing?.country && existing.country !== 'Desconocido'
+          ? { browser: visitorData.browser, os: visitorData.os, device: visitorData.device, language: visitorData.language, lastSeen: now }
+          : visitorData
+      await db.ref(`visitors/${projectId}/${visitorId}`).update(geoUpdate)
     }
 
     const sessionSnap = await db.ref(`sessions/${projectId}/${sessionId}`).once('value')
@@ -96,26 +112,30 @@ router.post('/track', async (req: Request, res: Response) => {
       ...geoFields,
     })
 
-    const pageviewId = uuidv4()
-    await db.ref(`pageviews/${projectId}/${pageviewId}`).set({
-      visitorId,
-      sessionId,
-      url: url || '',
-      title: title || '',
-      browser: browser || 'Unknown',
-      os: os || 'Unknown',
-      device: device || 'Unknown',
-      screenResolution: screenResolution || '',
-      language: language || '',
-      referer: referer || '',
-      timestamp: now,
-      ...geoFields,
-    })
+    let pageviewId: string | null = null
+    if (!skipPageview) {
+      pageviewId = uuidv4()
+      await db.ref(`pageviews/${projectId}/${pageviewId}`).set({
+        visitorId,
+        sessionId,
+        url: url || '',
+        title: title || '',
+        browser: browser || 'Unknown',
+        os: os || 'Unknown',
+        device: device || 'Unknown',
+        screenResolution: screenResolution || '',
+        language: language || '',
+        referer: referer || '',
+        timestamp: now,
+        ...geoFields,
+      })
+    }
 
     res.json({
       success: true,
       projectId,
       pageviewId,
+      sessionStartedAt: startedAt,
       geo: geoFields,
     })
   } catch (error) {

@@ -21,6 +21,7 @@
   }
 
   var API_BASE = script.src.replace(/\/tracker\.js.*$/, '');
+  var DEDUPE_MS = 30000;
 
   function generateId() {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
@@ -28,6 +29,14 @@
       var v = c === 'x' ? r : (r & 0x3) | 0x8;
       return v.toString(16);
     });
+  }
+
+  function storageGet(key) {
+    try { return sessionStorage.getItem(key); } catch (e) { return null; }
+  }
+
+  function storageSet(key, val) {
+    try { sessionStorage.setItem(key, val); } catch (e) { /* ignore */ }
   }
 
   function getVisitorId() {
@@ -46,16 +55,38 @@
 
   function getSessionId() {
     var key = '_ma_sid';
-    try {
-      var id = sessionStorage.getItem(key);
-      if (!id) {
-        id = generateId();
-        sessionStorage.setItem(key, id);
-      }
-      return id;
-    } catch (e) {
-      return generateId();
+    var id = storageGet(key);
+    if (!id) {
+      id = generateId();
+      storageSet(key, id);
     }
+    return id;
+  }
+
+  function getSessionStartTime() {
+    var key = '_ma_sst';
+    var t = storageGet(key);
+    if (!t) {
+      t = String(Date.now());
+      storageSet(key, t);
+    }
+    return parseInt(t, 10);
+  }
+
+  function shouldRecordPageview(url) {
+    var key = '_ma_lpv';
+    var now = Date.now();
+    var raw = storageGet(key);
+    if (raw) {
+      try {
+        var last = JSON.parse(raw);
+        if (last.url === url && now - last.ts < DEDUPE_MS) {
+          return false;
+        }
+      } catch (e) { /* ignore */ }
+    }
+    storageSet(key, JSON.stringify({ url: url, ts: now }));
+    return true;
   }
 
   function detectBrowser() {
@@ -104,33 +135,44 @@
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
       keepalive: true,
-    }).catch(function () {});
+      mode: 'cors',
+    }).then(function (res) {
+      if (!res.ok) {
+        console.warn('[MatuAnalytics] Request failed:', endpoint, res.status);
+      }
+      return res;
+    }).catch(function (err) {
+      console.warn('[MatuAnalytics] Network error:', endpoint, err.message || err);
+    });
   }
 
   var visitorId = getVisitorId();
   var sessionId = getSessionId();
+  var sessionStartTime = getSessionStartTime();
   var pageData = getPageData();
   var socket = null;
   var heartbeatInterval = null;
-  var projectId = null;
-  var sessionStartTime = Date.now();
+  var projectId = storageGet('_ma_pid');
   var geoData = {};
 
   function getDuration() {
     return Math.floor((Date.now() - sessionStartTime) / 1000);
   }
 
-  function track() {
-    postJSON('/api/track', Object.assign(
-      { siteId: siteId, visitorId: visitorId, sessionId: sessionId },
+  function track(skipPageview) {
+    var payload = Object.assign(
+      { siteId: siteId, visitorId: visitorId, sessionId: sessionId, skipPageview: !!skipPageview },
       pageData
-    )).then(function (res) {
+    );
+
+    return postJSON('/api/track', payload).then(function (res) {
       if (res && res.ok) {
         return res.json();
       }
     }).then(function (data) {
       if (data && data.projectId) {
         projectId = data.projectId;
+        storageSet('_ma_pid', projectId);
         if (data.geo) geoData = data.geo;
         connectSocket();
       }
@@ -138,54 +180,80 @@
   }
 
   function connectSocket() {
-    if (!projectId || typeof io === 'undefined') {
+    if (!projectId) return;
+
+    if (typeof io === 'undefined') {
       loadSocketIO(connectSocket);
       return;
     }
 
-    socket = io(API_BASE, { transports: ['websocket', 'polling'] });
+    if (socket && socket.connected) {
+      registerVisitor();
+      return;
+    }
 
-    socket.on('connect', function () {
-      socket.emit('visitor_register', Object.assign(
-        { projectId: projectId, visitorId: visitorId, sessionId: sessionId },
-        pageData,
-        geoData
-      ));
+    if (socket) {
+      socket.disconnect();
+    }
 
-      if (heartbeatInterval) clearInterval(heartbeatInterval);
-      heartbeatInterval = setInterval(function () {
-        var current = getPageData();
-        var duration = getDuration();
-        postJSON('/api/heartbeat', {
-          siteId: siteId,
-          sessionId: sessionId,
-          visitorId: visitorId,
-          url: current.url,
-          title: current.title,
-          duration: duration,
-        });
-        if (socket && socket.connected) {
-          socket.emit('heartbeat', {
-            projectId: projectId,
-            pageUrl: current.url,
-            pageTitle: current.title,
-            durationSeconds: duration,
-          });
-        }
-      }, 15000);
+    socket = io(API_BASE, {
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionDelay: 1000,
     });
 
-    socket.on('disconnect', function () {
-      if (heartbeatInterval) {
-        clearInterval(heartbeatInterval);
-        heartbeatInterval = null;
-      }
+    socket.on('connect', function () {
+      registerVisitor();
+      startHeartbeat();
     });
   }
 
+  function registerVisitor() {
+    if (!socket || !projectId) return;
+    socket.emit('visitor_register', Object.assign(
+      {
+        projectId: projectId,
+        visitorId: visitorId,
+        sessionId: sessionId,
+        sessionStartedAt: sessionStartTime,
+      },
+      pageData,
+      geoData
+    ));
+  }
+
+  function startHeartbeat() {
+    if (heartbeatInterval) clearInterval(heartbeatInterval);
+    heartbeatInterval = setInterval(function () {
+      var current = getPageData();
+      var duration = getDuration();
+      postJSON('/api/heartbeat', {
+        siteId: siteId,
+        sessionId: sessionId,
+        visitorId: visitorId,
+        url: current.url,
+        title: current.title,
+        duration: duration,
+      });
+      if (socket && socket.connected) {
+        socket.emit('heartbeat', {
+          projectId: projectId,
+          pageUrl: current.url,
+          pageTitle: current.title,
+          durationSeconds: duration,
+        });
+      }
+    }, 10000);
+  }
+
   function loadSocketIO(callback) {
+    if (document.querySelector('script[data-ma-socket]')) {
+      setTimeout(callback, 200);
+      return;
+    }
     var s = document.createElement('script');
     s.src = API_BASE + '/socket.io/socket.io.js';
+    s.setAttribute('data-ma-socket', '1');
     s.onload = callback;
     s.onerror = function () {
       console.warn('[MatuAnalytics] Could not load Socket.IO client');
@@ -195,6 +263,17 @@
 
   function onPageChange() {
     pageData = getPageData();
+    if (!shouldRecordPageview(pageData.url)) {
+      if (socket && socket.connected) {
+        socket.emit('heartbeat', {
+          projectId: projectId,
+          pageUrl: pageData.url,
+          pageTitle: pageData.title,
+          durationSeconds: getDuration(),
+        });
+      }
+      return;
+    }
     postJSON('/api/track', Object.assign(
       { siteId: siteId, visitorId: visitorId, sessionId: sessionId },
       pageData
@@ -215,19 +294,23 @@
   };
   window.addEventListener('popstate', onPageChange);
 
-  window.addEventListener('beforeunload', function () {
+  window.addEventListener('pagehide', function () {
     postJSON('/api/heartbeat', {
       siteId: siteId,
       sessionId: sessionId,
       visitorId: visitorId,
       duration: getDuration(),
     });
-    if (socket) socket.disconnect();
   });
 
+  function init() {
+    var recordPageview = shouldRecordPageview(pageData.url);
+    track(!recordPageview);
+  }
+
   if (document.readyState === 'complete') {
-    track();
+    init();
   } else {
-    window.addEventListener('load', track);
+    window.addEventListener('load', init);
   }
 })();

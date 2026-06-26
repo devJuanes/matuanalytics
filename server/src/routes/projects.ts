@@ -95,8 +95,8 @@ router.get('/:id', async (req: Request, res: Response) => {
 })
 
 export function generateTrackingCode(trackingId: string): string {
-  const apiUrl = config.apiUrl
-  return `<script src="${apiUrl}/tracker.js" data-site-id="${trackingId}"></script>`
+  const trackerUrl = config.trackerUrl.replace(/\/$/, '')
+  return `<script src="${trackerUrl}/tracker.js" data-site-id="${trackingId}" async></script>`
 }
 
 export interface ProjectRecord {

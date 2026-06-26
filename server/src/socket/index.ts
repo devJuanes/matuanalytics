@@ -26,14 +26,36 @@ export interface ActiveUsersPayload {
   visitors?: ActiveVisitor[]
 }
 
+const STALE_MS = 45_000
+
 class ActiveUsersManager {
   private projects = new Map<string, Map<string, ActiveVisitor>>()
 
+  private purgeStale(projectId: string) {
+    const project = this.projects.get(projectId)
+    if (!project) return
+    const now = Date.now()
+    for (const [socketId, visitor] of project) {
+      if (now - visitor.lastHeartbeat > STALE_MS) {
+        project.delete(socketId)
+      }
+    }
+    if (project.size === 0) this.projects.delete(projectId)
+  }
+
   addVisitor(projectId: string, visitor: ActiveVisitor) {
+    this.purgeStale(projectId)
     if (!this.projects.has(projectId)) {
       this.projects.set(projectId, new Map())
     }
-    this.projects.get(projectId)!.set(visitor.socketId, visitor)
+    const project = this.projects.get(projectId)!
+    // Misma sesión/visitante reconectando (recarga de página) → reemplazar, no duplicar
+    for (const [socketId, v] of project) {
+      if (v.sessionId === visitor.sessionId || v.visitorId === visitor.visitorId) {
+        project.delete(socketId)
+      }
+    }
+    project.set(visitor.socketId, visitor)
   }
 
   removeVisitor(projectId: string, socketId: string): ActiveVisitor | null {
@@ -48,6 +70,7 @@ class ActiveUsersManager {
   }
 
   updateHeartbeat(projectId: string, socketId: string, data: Partial<ActiveVisitor>) {
+    this.purgeStale(projectId)
     const project = this.projects.get(projectId)
     if (!project) return null
     const visitor = project.get(socketId)
@@ -60,10 +83,12 @@ class ActiveUsersManager {
   }
 
   getCount(projectId: string): number {
+    this.purgeStale(projectId)
     return this.projects.get(projectId)?.size || 0
   }
 
   getVisitors(projectId: string): ActiveVisitor[] {
+    this.purgeStale(projectId)
     return Array.from(this.projects.get(projectId)?.values() || [])
   }
 
@@ -78,6 +103,17 @@ class ActiveUsersManager {
       lastEvent,
       ...(includeVisitors ? { visitors: this.getVisitors(projectId) } : {}),
     }
+  }
+
+  purgeAllStale(): string[] {
+    const changed: string[] = []
+    for (const projectId of [...this.projects.keys()]) {
+      const before = this.getCount(projectId)
+      this.purgeStale(projectId)
+      const after = this.getCount(projectId)
+      if (before !== after) changed.push(projectId)
+    }
+    return changed
   }
 }
 
@@ -97,9 +133,18 @@ export function broadcastActiveUsers(
 }
 
 export function registerSocketHandlers(io: Server) {
+  // Limpiar visitantes fantasma periódicamente
+  setInterval(() => {
+    for (const projectId of activeUsersManager.purgeAllStale()) {
+      broadcastActiveUsers(io, projectId, 'heartbeat')
+    }
+  }, 15_000)
+
   io.on('connection', (socket: Socket) => {
     socket.on('join_dashboard', (projectId: string) => {
       socket.join(`dashboard:${projectId}`)
+      socket.data.role = 'dashboard'
+      socket.data.dashboardProjectId = projectId
       const payload = activeUsersManager.getPayload(projectId, 'heartbeat', true)
       socket.emit('active_users_update', payload)
     })
@@ -124,13 +169,15 @@ export function registerSocketHandlers(io: Server) {
       city?: string
       lat?: number
       lng?: number
+      sessionStartedAt?: number
     }) => {
+      const sessionStart = data.sessionStartedAt || Date.now()
       const visitor: ActiveVisitor = {
         ...data,
         socketId: socket.id,
-        connectedAt: Date.now(),
+        connectedAt: sessionStart,
         lastHeartbeat: Date.now(),
-        durationSeconds: 0,
+        durationSeconds: Math.floor((Date.now() - sessionStart) / 1000),
       }
       activeUsersManager.addVisitor(data.projectId, visitor)
       socket.data.projectId = data.projectId

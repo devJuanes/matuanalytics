@@ -32,11 +32,20 @@ function resolveDatabaseURL(serviceAccountPath: string): string {
 const serviceAccountPath = resolveServiceAccountPath()
 const databaseURL = resolveDatabaseURL(serviceAccountPath)
 
+function parseCorsOrigins(): string[] {
+  const raw = process.env.CORS_ORIGIN || 'http://localhost:5173'
+  return raw.split(',').map((o) => o.trim()).filter(Boolean)
+}
+
 export const config = {
   port: parseInt(process.env.PORT || '3001', 10),
+  nodeEnv: process.env.NODE_ENV || 'development',
   jwtSecret: process.env.JWT_SECRET || 'matuanalytics-dev-secret-change-in-production',
   apiUrl: process.env.API_URL || 'http://localhost:3001',
-  corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  /** URL pública del tracker (HTTPS). Sitios de clientes cargan tracker.js desde aquí. */
+  trackerUrl: process.env.TRACKER_URL || process.env.API_URL || 'http://localhost:3001',
+  corsOrigins: parseCorsOrigins(),
+  trustProxy: process.env.TRUST_PROXY === 'true' || process.env.NODE_ENV === 'production',
   firebase: {
     databaseURL,
     serviceAccountPath,

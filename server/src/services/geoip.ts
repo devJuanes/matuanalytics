@@ -1,3 +1,5 @@
+import { isPrivateIp } from '../utils/ip.js'
+
 export interface GeoLocation {
   country: string
   countryCode: string
@@ -13,18 +15,16 @@ const LOCAL_GEO: GeoLocation = {
   countryCode: 'LO',
   city: 'Localhost',
   region: '',
-  lat: 40.4168,
-  lng: -3.7038,
+  lat: 0,
+  lng: 0,
 }
 
-function isPrivateIp(ip: string): boolean {
-  if (!ip || ip === '::1' || ip === '127.0.0.1') return true
-  if (ip.startsWith('192.168.') || ip.startsWith('10.') || ip.startsWith('172.')) return true
-  return false
+function isPrivateIpLocal(ip: string): boolean {
+  return isPrivateIp(ip)
 }
 
 export async function resolveGeo(ip: string): Promise<GeoLocation> {
-  if (isPrivateIp(ip)) return LOCAL_GEO
+  if (isPrivateIpLocal(ip)) return LOCAL_GEO
 
   const cached = cache.get(ip)
   if (cached) return cached

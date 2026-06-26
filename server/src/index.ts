@@ -19,12 +19,39 @@ const httpServer = createServer(app)
 
 const io = new Server(httpServer, {
   cors: {
-    origin: [config.corsOrigin, '*'],
+    origin: true,
     methods: ['GET', 'POST'],
+    credentials: true,
   },
 })
 
-app.use(cors({ origin: true, credentials: true }))
+if (config.trustProxy) {
+  app.set('trust proxy', 1)
+}
+
+const dashboardCors = cors({
+  origin: (origin, callback) => {
+    if (!origin || config.corsOrigins.includes(origin)) {
+      callback(null, true)
+    } else {
+      callback(null, false)
+    }
+  },
+  credentials: true,
+})
+
+const publicTrackingCors = cors({ origin: true })
+
+app.use((req, res, next) => {
+  const isPublicTracking =
+    req.path === '/tracker.js' ||
+    req.path === '/api/track' ||
+    req.path === '/api/heartbeat'
+  if (isPublicTracking) {
+    return publicTrackingCors(req, res, next)
+  }
+  return dashboardCors(req, res, next)
+})
 app.use(express.json())
 
 app.use('/public', express.static(path.join(__dirname, '../public')))
@@ -55,7 +82,7 @@ async function start() {
   await getDatabase()
   httpServer.listen(config.port, () => {
     console.log(`MatuAnalytics API running on http://localhost:${config.port}`)
-    console.log(`Tracker script: ${config.apiUrl}/tracker.js`)
+    console.log(`Tracker script: ${config.trackerUrl}/tracker.js`)
   })
 }
 

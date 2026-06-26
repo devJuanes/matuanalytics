@@ -2,6 +2,7 @@ data/
 server/data/
 server/.env
 .env
+.env.production
 node_modules/
 dist/
 server/dist/

@@ -8,7 +8,9 @@
     "dev:server": "npm run dev --prefix server",
     "dev:all": "concurrently \"npm run dev\" \"npm run dev:server\"",
     "build": "vue-tsc -b && vite build",
+    "build:prod": "vite build --mode production",
     "build:server": "npm run build --prefix server",
+    "build:all": "npm run build:prod && npm run build:server",
     "preview": "vite preview"
   },
   "dependencies": {
