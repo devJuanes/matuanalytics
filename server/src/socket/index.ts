@@ -29,15 +29,16 @@ export interface ActiveUsersPayload {
 const STALE_MS = 45_000
 
 class ActiveUsersManager {
+  /** projectId → sessionId → visitor */
   private projects = new Map<string, Map<string, ActiveVisitor>>()
 
   private purgeStale(projectId: string) {
     const project = this.projects.get(projectId)
     if (!project) return
     const now = Date.now()
-    for (const [socketId, visitor] of project) {
+    for (const [sessionId, visitor] of project) {
       if (now - visitor.lastHeartbeat > STALE_MS) {
-        project.delete(socketId)
+        project.delete(sessionId)
       }
     }
     if (project.size === 0) this.projects.delete(projectId)
@@ -49,31 +50,25 @@ class ActiveUsersManager {
       this.projects.set(projectId, new Map())
     }
     const project = this.projects.get(projectId)!
-    // Misma sesión/visitante reconectando (recarga de página) → reemplazar, no duplicar
-    for (const [socketId, v] of project) {
-      if (v.sessionId === visitor.sessionId || v.visitorId === visitor.visitorId) {
-        project.delete(socketId)
-      }
-    }
-    project.set(visitor.socketId, visitor)
+    project.set(visitor.sessionId, visitor)
   }
 
-  removeVisitor(projectId: string, socketId: string): ActiveVisitor | null {
+  removeVisitor(projectId: string, sessionId: string): ActiveVisitor | null {
     const project = this.projects.get(projectId)
     if (!project) return null
-    const visitor = project.get(socketId) || null
-    project.delete(socketId)
+    const visitor = project.get(sessionId) || null
+    project.delete(sessionId)
     if (project.size === 0) {
       this.projects.delete(projectId)
     }
     return visitor
   }
 
-  updateHeartbeat(projectId: string, socketId: string, data: Partial<ActiveVisitor>) {
+  updateHeartbeat(projectId: string, sessionId: string, data: Partial<ActiveVisitor>) {
     this.purgeStale(projectId)
     const project = this.projects.get(projectId)
     if (!project) return null
-    const visitor = project.get(socketId)
+    const visitor = project.get(sessionId)
     if (!visitor) return null
     Object.assign(visitor, data, { lastHeartbeat: Date.now() })
     if (visitor.connectedAt) {
@@ -133,7 +128,6 @@ export function broadcastActiveUsers(
 }
 
 export function registerSocketHandlers(io: Server) {
-  // Limpiar visitantes fantasma periódicamente
   setInterval(() => {
     for (const projectId of activeUsersManager.purgeAllStale()) {
       broadcastActiveUsers(io, projectId, 'heartbeat')
@@ -181,34 +175,49 @@ export function registerSocketHandlers(io: Server) {
       }
       activeUsersManager.addVisitor(data.projectId, visitor)
       socket.data.projectId = data.projectId
+      socket.data.sessionId = data.sessionId
       socket.data.role = 'visitor'
-      socket.join(`project:${data.projectId}`)
 
+      socket.join(`project:${data.projectId}`)
       io.to(`project:${data.projectId}`).emit('visitor_connected', visitor)
       broadcastActiveUsers(io, data.projectId, 'visitor_connected')
     })
 
     socket.on('heartbeat', (data: {
       projectId: string
+      sessionId?: string
       pageUrl?: string
       pageTitle?: string
       durationSeconds?: number
     }) => {
-      activeUsersManager.updateHeartbeat(data.projectId, socket.id, {
+      const sessionId = data.sessionId || (socket.data.sessionId as string)
+      if (!sessionId) return
+
+      activeUsersManager.updateHeartbeat(data.projectId, sessionId, {
         pageUrl: data.pageUrl,
         pageTitle: data.pageTitle,
         durationSeconds: data.durationSeconds,
+        socketId: socket.id,
       })
       broadcastActiveUsers(io, data.projectId, 'heartbeat')
     })
 
-    socket.on('page_view', (data: { projectId: string; pageUrl: string; pageTitle: string }) => {
-      activeUsersManager.updateHeartbeat(data.projectId, socket.id, {
+    socket.on('page_view', (data: {
+      projectId: string
+      sessionId?: string
+      pageUrl: string
+      pageTitle: string
+    }) => {
+      const sessionId = data.sessionId || (socket.data.sessionId as string)
+      if (!sessionId) return
+
+      activeUsersManager.updateHeartbeat(data.projectId, sessionId, {
         pageUrl: data.pageUrl,
         pageTitle: data.pageTitle,
       })
       io.to(`dashboard:${data.projectId}`).emit('page_view', {
         ...data,
+        sessionId,
         timestamp: Date.now(),
         socketId: socket.id,
       })
@@ -217,9 +226,10 @@ export function registerSocketHandlers(io: Server) {
 
     socket.on('disconnect', () => {
       const projectId = socket.data.projectId as string | undefined
-      if (!projectId || socket.data.role !== 'visitor') return
+      const sessionId = socket.data.sessionId as string | undefined
+      if (!projectId || !sessionId || socket.data.role !== 'visitor') return
 
-      const visitor = activeUsersManager.removeVisitor(projectId, socket.id)
+      const visitor = activeUsersManager.removeVisitor(projectId, sessionId)
       if (visitor) {
         io.to(`project:${projectId}`).emit('visitor_disconnected', visitor)
         broadcastActiveUsers(io, projectId, 'visitor_disconnected')

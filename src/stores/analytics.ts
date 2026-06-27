@@ -6,6 +6,19 @@ import type { DashboardData, ActiveUsersUpdate } from '@/types'
 
 export type DateRange = 'today' | '7d' | '30d'
 
+function mapVisitorsToLivePoints(visitors: ActiveUsersUpdate['visitors']) {
+  return (visitors || [])
+    .filter((v) => v.lat && v.lng)
+    .map((v) => ({
+      lat: v.lat!,
+      lng: v.lng!,
+      city: v.city || '',
+      country: v.country || '',
+      pageTitle: v.pageTitle,
+      browser: v.browser,
+    }))
+}
+
 export const useAnalyticsStore = defineStore('analytics', () => {
   const dashboard = ref<DashboardData | null>(null)
   const loading = ref(false)
@@ -46,16 +59,10 @@ export const useAnalyticsStore = defineStore('analytics', () => {
         dashboard.value.stats.activeUsers = data.activeUsers
         if (data.visitors) {
           dashboard.value.activeVisitors = data.visitors
-          dashboard.value.liveMapPoints = data.visitors
-            .filter((v) => v.lat && v.lng)
-            .map((v) => ({
-              lat: v.lat!,
-              lng: v.lng!,
-              city: v.city || '',
-              country: v.country || '',
-              pageTitle: v.pageTitle,
-              browser: v.browser,
-            }))
+          dashboard.value.liveMapPoints = mapVisitorsToLivePoints(data.visitors)
+        } else if (data.activeUsers === 0) {
+          dashboard.value.activeVisitors = []
+          dashboard.value.liveMapPoints = []
         }
       }
     })

@@ -22,6 +22,8 @@
 
   var API_BASE = script.src.replace(/\/tracker\.js.*$/, '');
   var DEDUPE_MS = 30000;
+  var SESSION_TIMEOUT_MS = 30 * 60 * 1000;
+  var HEARTBEAT_MS = 10000;
 
   function generateId() {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
@@ -39,27 +41,40 @@
     try { sessionStorage.setItem(key, val); } catch (e) { /* ignore */ }
   }
 
+  function localGet(key) {
+    try { return localStorage.getItem(key); } catch (e) { return null; }
+  }
+
+  function localSet(key, val) {
+    try { localStorage.setItem(key, val); } catch (e) { /* ignore */ }
+  }
+
   function getVisitorId() {
     var key = '_ma_vid';
-    try {
-      var id = localStorage.getItem(key);
-      if (!id) {
-        id = generateId();
-        localStorage.setItem(key, id);
-      }
-      return id;
-    } catch (e) {
-      return generateId();
+    var id = localGet(key);
+    if (!id) {
+      id = generateId();
+      localSet(key, id);
     }
+    return id;
   }
 
   function getSessionId() {
-    var key = '_ma_sid';
-    var id = storageGet(key);
-    if (!id) {
-      id = generateId();
-      storageSet(key, id);
+    var sidKey = '_ma_sid';
+    var activityKey = '_ma_last';
+    var now = Date.now();
+    var id = storageGet(sidKey);
+    var lastActivity = parseInt(storageGet(activityKey) || '0', 10);
+
+    if (id && lastActivity && now - lastActivity < SESSION_TIMEOUT_MS) {
+      storageSet(activityKey, String(now));
+      return id;
     }
+
+    id = generateId();
+    storageSet(sidKey, id);
+    storageSet('_ma_sst', String(now));
+    storageSet(activityKey, String(now));
     return id;
   }
 
@@ -71,6 +86,10 @@
       storageSet(key, t);
     }
     return parseInt(t, 10);
+  }
+
+  function touchSession() {
+    storageSet('_ma_last', String(Date.now()));
   }
 
   function shouldRecordPageview(url) {
@@ -154,12 +173,14 @@
   var heartbeatInterval = null;
   var projectId = storageGet('_ma_pid');
   var geoData = {};
+  var registering = false;
 
   function getDuration() {
     return Math.floor((Date.now() - sessionStartTime) / 1000);
   }
 
   function track(skipPageview) {
+    touchSession();
     var payload = Object.assign(
       { siteId: siteId, visitorId: visitorId, sessionId: sessionId, skipPageview: !!skipPageview },
       pageData
@@ -209,7 +230,8 @@
   }
 
   function registerVisitor() {
-    if (!socket || !projectId) return;
+    if (!socket || !projectId || registering) return;
+    registering = true;
     socket.emit('visitor_register', Object.assign(
       {
         projectId: projectId,
@@ -220,11 +242,13 @@
       pageData,
       geoData
     ));
+    setTimeout(function () { registering = false; }, 500);
   }
 
   function startHeartbeat() {
     if (heartbeatInterval) clearInterval(heartbeatInterval);
     heartbeatInterval = setInterval(function () {
+      touchSession();
       var current = getPageData();
       var duration = getDuration();
       postJSON('/api/heartbeat', {
@@ -238,12 +262,13 @@
       if (socket && socket.connected) {
         socket.emit('heartbeat', {
           projectId: projectId,
+          sessionId: sessionId,
           pageUrl: current.url,
           pageTitle: current.title,
           durationSeconds: duration,
         });
       }
-    }, 10000);
+    }, HEARTBEAT_MS);
   }
 
   function loadSocketIO(callback) {
@@ -262,11 +287,13 @@
   }
 
   function onPageChange() {
+    touchSession();
     pageData = getPageData();
     if (!shouldRecordPageview(pageData.url)) {
-      if (socket && socket.connected) {
+      if (socket && socket.connected && projectId) {
         socket.emit('heartbeat', {
           projectId: projectId,
+          sessionId: sessionId,
           pageUrl: pageData.url,
           pageTitle: pageData.title,
           durationSeconds: getDuration(),
@@ -277,10 +304,15 @@
     postJSON('/api/track', Object.assign(
       { siteId: siteId, visitorId: visitorId, sessionId: sessionId },
       pageData
-    ));
+    )).then(function (res) {
+      if (res && res.ok) return res.json();
+    }).then(function (data) {
+      if (data && data.geo) geoData = data.geo;
+    });
     if (socket && socket.connected && projectId) {
       socket.emit('page_view', {
         projectId: projectId,
+        sessionId: sessionId,
         pageUrl: pageData.url,
         pageTitle: pageData.title,
       });
@@ -299,6 +331,8 @@
       siteId: siteId,
       sessionId: sessionId,
       visitorId: visitorId,
+      url: pageData.url,
+      title: pageData.title,
       duration: getDuration(),
     });
   });

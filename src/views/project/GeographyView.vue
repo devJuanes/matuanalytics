@@ -19,15 +19,16 @@ const totalCountryVisits = computed(() =>
 
 const mapPoints = computed(() => {
   if (!d.value) return []
-  if (d.value.liveMapPoints.length) return d.value.liveMapPoints
-  return d.value.cities.map((c) => ({
-    lat: c.lat,
-    lng: c.lng,
-    city: c.name,
-    country: c.country,
-    pageTitle: `${c.count} visitas`,
-    browser: '',
-  }))
+  return d.value.cities
+    .filter((c) => c.lat && c.lng)
+    .map((c) => ({
+      lat: c.lat,
+      lng: c.lng,
+      city: c.name,
+      country: c.country,
+      pageTitle: `${c.count} visitas`,
+      browser: '',
+    }))
 })
 </script>
 
@@ -35,7 +36,7 @@ const mapPoints = computed(() => {
   <div v-if="d" class="space-y-5">
     <div class="grid gap-5 lg:grid-cols-3">
       <div class="lg:col-span-2">
-        <LiveMap :points="mapPoints" />
+        <LiveMap mode="historical" :points="mapPoints" />
       </div>
       <CountryRankList
         title="Top mercados"

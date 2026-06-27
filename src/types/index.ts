@@ -23,6 +23,7 @@ export interface ActiveVisitor {
   os: string
   device: string
   country?: string
+  countryCode?: string
   city?: string
   lat?: number
   lng?: number

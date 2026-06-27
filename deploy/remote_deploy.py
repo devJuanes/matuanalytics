@@ -106,7 +106,8 @@ rm -f {remote_tar}
 
 echo "==> Frontend env..."
 cat > .env.production << 'ENVEOF'
-VITE_API_URL=https://api.matubyte.com
+VITE_API_URL=https://matuanalytics.matubyte.com
+VITE_TRACKER_URL=https://matuanalytics.matubyte.com
 VITE_FIREBASE_API_KEY=AIzaSyCDuYETmGyrLNZVNcPMiuK1pXCsEQPHRE4
 VITE_FIREBASE_AUTH_DOMAIN=matuanalytics-37f2f.firebaseapp.com
 VITE_FIREBASE_PROJECT_ID=matuanalytics-37f2f
@@ -120,7 +121,8 @@ echo "==> Backend env..."
 cat > server/.env << ENVEOF
 NODE_ENV=production
 PORT=3001
-API_URL=https://api.matubyte.com
+API_URL=https://matuanalytics.matubyte.com
+TRACKER_URL=https://matuanalytics.matubyte.com
 CORS_ORIGIN=https://matuanalytics.matubyte.com
 JWT_SECRET={jwt}
 FIREBASE_DATABASE_URL=https://matuanalytics-37f2f-default-rtdb.firebaseio.com

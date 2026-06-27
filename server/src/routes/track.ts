@@ -6,6 +6,7 @@ import { getClientIp } from '../utils/ip.js'
 import type { ProjectRecord } from './projects.js'
 
 const router = Router()
+const PAGEVIEW_DEDUPE_MS = 30_000
 
 router.use((_req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -80,6 +81,7 @@ router.post('/track', async (req: Request, res: Response) => {
       device: device || 'Unknown',
       language: language || '',
       lastSeen: now,
+      lastIp: ip,
       ...geoFields,
       ...(isNewVisitor ? { firstSeen: now, totalDurationSeconds: 0 } : {}),
     }
@@ -87,17 +89,23 @@ router.post('/track', async (req: Request, res: Response) => {
     if (isNewVisitor) {
       await db.ref(`visitors/${projectId}/${visitorId}`).set(visitorData)
     } else {
-      const existing = visitorSnap.val() as { country?: string } | null
-      const geoUpdate =
-        existing?.country && existing.country !== 'Desconocido'
-          ? { browser: visitorData.browser, os: visitorData.os, device: visitorData.device, language: visitorData.language, lastSeen: now }
-          : visitorData
-      await db.ref(`visitors/${projectId}/${visitorId}`).update(geoUpdate)
+      await db.ref(`visitors/${projectId}/${visitorId}`).update(visitorData)
     }
 
     const sessionSnap = await db.ref(`sessions/${projectId}/${sessionId}`).once('value')
-    const sessionData = sessionSnap.val() as { startedAt?: number } | null
+    const sessionData = sessionSnap.val() as {
+      startedAt?: number
+      lastPageviewUrl?: string
+      lastPageviewAt?: number
+    } | null
     const startedAt = sessionData?.startedAt || now
+
+    let shouldSkipPageview = !!skipPageview
+    if (!shouldSkipPageview && url && sessionData?.lastPageviewUrl === url && sessionData?.lastPageviewAt) {
+      if (now - sessionData.lastPageviewAt < PAGEVIEW_DEDUPE_MS) {
+        shouldSkipPageview = true
+      }
+    }
 
     await db.ref(`sessions/${projectId}/${sessionId}`).update({
       visitorId,
@@ -113,7 +121,7 @@ router.post('/track', async (req: Request, res: Response) => {
     })
 
     let pageviewId: string | null = null
-    if (!skipPageview) {
+    if (!shouldSkipPageview) {
       pageviewId = uuidv4()
       await db.ref(`pageviews/${projectId}/${pageviewId}`).set({
         visitorId,
@@ -129,6 +137,10 @@ router.post('/track', async (req: Request, res: Response) => {
         timestamp: now,
         ...geoFields,
       })
+      await db.ref(`sessions/${projectId}/${sessionId}`).update({
+        lastPageviewUrl: url || '',
+        lastPageviewAt: now,
+      })
     }
 
     res.json({
@@ -136,6 +148,7 @@ router.post('/track', async (req: Request, res: Response) => {
       projectId,
       pageviewId,
       sessionStartedAt: startedAt,
+      skippedPageview: shouldSkipPageview,
       geo: geoFields,
     })
   } catch (error) {

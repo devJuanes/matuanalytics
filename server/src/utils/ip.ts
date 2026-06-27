@@ -11,30 +11,34 @@ export function isPrivateIp(ip: string): boolean {
   return false
 }
 
-/** IP real del visitante detrás de Nginx / Cloudflare. */
+function normalizeIp(raw: string): string {
+  return raw.trim().replace(/^::ffff:/, '')
+}
+
+/** IP real del visitante detrás de Nginx / Cloudflare / proxies. */
 export function getClientIp(req: Request): string {
-  const candidates: string[] = []
-
   const cf = req.headers['cf-connecting-ip']
-  if (typeof cf === 'string' && cf) candidates.push(cf.trim())
-
-  const realIp = req.headers['x-real-ip']
-  if (typeof realIp === 'string' && realIp) candidates.push(realIp.trim())
+  if (typeof cf === 'string' && cf) {
+    const ip = normalizeIp(cf)
+    if (!isPrivateIp(ip)) return ip
+  }
 
   const forwarded = req.headers['x-forwarded-for']
   if (typeof forwarded === 'string') {
-    candidates.push(...forwarded.split(',').map((s) => s.trim()))
+    const first = normalizeIp(forwarded.split(',')[0] || '')
+    if (first && !isPrivateIp(first)) return first
   } else if (Array.isArray(forwarded)) {
     for (const entry of forwarded) {
-      candidates.push(...entry.split(',').map((s) => s.trim()))
+      const first = normalizeIp(entry.split(',')[0] || '')
+      if (first && !isPrivateIp(first)) return first
     }
   }
 
-  for (const raw of candidates) {
-    const ip = raw.replace('::ffff:', '')
-    if (ip && !isPrivateIp(ip)) return ip
+  const realIp = req.headers['x-real-ip']
+  if (typeof realIp === 'string' && realIp) {
+    const ip = normalizeIp(realIp)
+    if (!isPrivateIp(ip)) return ip
   }
 
-  const direct = (req.socket.remoteAddress || '').replace('::ffff:', '')
-  return direct
+  return normalizeIp(req.socket.remoteAddress || '')
 }

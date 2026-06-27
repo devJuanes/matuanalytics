@@ -3,9 +3,14 @@ import { onMounted, onUnmounted, ref, watch } from 'vue'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   points: { lat: number; lng: number; city: string; country: string; pageTitle?: string; browser?: string }[]
-}>()
+  mode?: 'live' | 'historical'
+  activeCount?: number
+}>(), {
+  mode: 'historical',
+  activeCount: 0,
+})
 
 const mapEl = ref<HTMLElement | null>(null)
 let map: L.Map | null = null
@@ -29,24 +34,28 @@ function updateMarkers() {
   if (!map || !markers) return
   markers.clearLayers()
 
-  for (const p of props.points) {
-    if (!p.lat || !p.lng) continue
+  const valid = props.points.filter((p) => p.lat && p.lng)
+  for (const p of valid) {
+    const color = props.mode === 'live' ? '#10b981' : '#111827'
     const marker = L.circleMarker([p.lat, p.lng], {
-      radius: 7,
-      fillColor: '#111827',
+      radius: props.mode === 'live' ? 8 : 7,
+      fillColor: color,
       color: '#fff',
       weight: 2,
       opacity: 1,
-      fillOpacity: 0.9,
+      fillOpacity: 0.92,
     })
     marker.bindPopup(
-      `<strong>${p.city || p.country}</strong><br/>${p.pageTitle || ''}<br/><small>${p.browser || ''}</small>`,
+      `<strong>${p.city || p.country || 'Visitante'}</strong><br/>${p.pageTitle || ''}<br/><small>${p.browser || ''}</small>`,
     )
     markers.addLayer(marker)
   }
 
-  if (props.points.length === 1) {
-    map.setView([props.points[0].lat, props.points[0].lng], 5)
+  if (valid.length === 1) {
+    map.setView([valid[0].lat, valid[0].lng], 5)
+  } else if (valid.length > 1) {
+    const bounds = L.latLngBounds(valid.map((p) => [p.lat, p.lng] as [number, number]))
+    map.fitBounds(bounds, { padding: [30, 30], maxZoom: 6 })
   }
 }
 
@@ -55,6 +64,7 @@ onMounted(() => {
 })
 
 watch(() => props.points, updateMarkers, { deep: true })
+watch(() => props.mode, updateMarkers)
 
 onUnmounted(() => {
   map?.remove()
@@ -66,15 +76,39 @@ onUnmounted(() => {
   <div class="card overflow-hidden">
     <div class="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
       <div>
-        <h3 class="text-sm font-semibold text-slate-900">Mapa en vivo</h3>
-        <p class="text-[11px] text-slate-500 mt-0.5">{{ points.length }} ubicaciones</p>
+        <h3 class="text-sm font-semibold text-slate-900">
+          {{ mode === 'live' ? 'Mapa en vivo' : 'Mapa geográfico' }}
+        </h3>
+        <p class="text-[11px] text-slate-500 mt-0.5">
+          <template v-if="mode === 'live'">
+            {{ activeCount > 0 ? `${points.length} ubicaciones activas` : 'Solo usuarios conectados ahora' }}
+          </template>
+          <template v-else>
+            {{ points.length }} ubicaciones registradas
+          </template>
+        </p>
       </div>
-      <span class="flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-        <span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-        Live
+      <span
+        v-if="mode === 'live'"
+        class="flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+        :class="activeCount > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'"
+      >
+        <span
+          class="h-1.5 w-1.5 rounded-full"
+          :class="activeCount > 0 ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'"
+        />
+        {{ activeCount > 0 ? 'Live' : 'Offline' }}
       </span>
     </div>
-    <div ref="mapEl" class="h-72 w-full z-0" />
+
+    <div v-if="mode === 'live' && activeCount === 0" class="flex flex-col items-center justify-center h-72 bg-slate-50 text-center px-6">
+      <span class="h-3 w-3 rounded-full bg-slate-300 mb-3" />
+      <p class="text-sm font-medium text-slate-600">Nadie conectado ahora</p>
+      <p class="text-xs text-slate-400 mt-1 max-w-xs">
+        Cuando alguien visite tu sitio con el script instalado, aparecerá aquí en tiempo real.
+      </p>
+    </div>
+    <div v-else ref="mapEl" class="h-72 w-full z-0" />
   </div>
 </template>
 

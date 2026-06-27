@@ -69,11 +69,24 @@ def main():
     sftp.close()
 
     patch_env = r"""
+cat > /root/apps/matuanalytics/.env.production << 'ENVEOF'
+VITE_API_URL=https://matuanalytics.matubyte.com
+VITE_TRACKER_URL=https://matuanalytics.matubyte.com
+VITE_FIREBASE_API_KEY=AIzaSyCDuYETmGyrLNZVNcPMiuK1pXCsEQPHRE4
+VITE_FIREBASE_AUTH_DOMAIN=matuanalytics-37f2f.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=matuanalytics-37f2f
+VITE_FIREBASE_STORAGE_BUCKET=matuanalytics-37f2f.firebasestorage.app
+VITE_FIREBASE_MESSAGING_SENDER_ID=316220274720
+VITE_FIREBASE_APP_ID=1:316220274720:web:2c481eeb1349dd86d2e445
+VITE_FIREBASE_MEASUREMENT_ID=G-S4ZTD3231Y
+ENVEOF
 if ! grep -q TRACKER_URL /root/apps/matuanalytics/server/.env; then
   echo 'TRACKER_URL=https://matuanalytics.matubyte.com' >> /root/apps/matuanalytics/server/.env
 else
   sed -i 's|^TRACKER_URL=.*|TRACKER_URL=https://matuanalytics.matubyte.com|' /root/apps/matuanalytics/server/.env
 fi
+sed -i 's|^API_URL=.*|API_URL=https://matuanalytics.matubyte.com|' /root/apps/matuanalytics/server/.env || echo 'API_URL=https://matuanalytics.matubyte.com' >> /root/apps/matuanalytics/server/.env
+sed -i 's|^TRUST_PROXY=.*|TRUST_PROXY=true|' /root/apps/matuanalytics/server/.env || echo 'TRUST_PROXY=true' >> /root/apps/matuanalytics/server/.env
 """
 
     cmds = f"""
