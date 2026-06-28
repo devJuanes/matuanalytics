@@ -1,4 +1,5 @@
 import type { Server, Socket } from 'socket.io'
+import { findProjectByTrackingId } from '../services/projectLookup.js'
 
 let ioServer: Server | null = null
 
@@ -196,8 +197,28 @@ export function registerSocketHandlers(io: Server) {
 
     socket.on('join_esp32', (projectId: string) => {
       socket.join(`esp32:${projectId}`)
+      socket.data.role = 'esp32'
+      socket.data.projectId = projectId
       const payload = activeUsersManager.getPayload(projectId, 'heartbeat')
       socket.emit('active_users_update', payload)
+    })
+
+    socket.on('join_esp32_site', async (siteId: string) => {
+      try {
+        const found = await findProjectByTrackingId(siteId)
+        if (!found) {
+          socket.emit('device_error', { message: 'Tracking ID no encontrado' })
+          return
+        }
+        socket.join(`esp32:${found.id}`)
+        socket.data.role = 'esp32'
+        socket.data.projectId = found.id
+        const payload = activeUsersManager.getPayload(found.id, 'heartbeat')
+        socket.emit('active_users_update', payload)
+      } catch (err) {
+        console.error('join_esp32_site error:', err)
+        socket.emit('device_error', { message: 'Error al unir dispositivo' })
+      }
     })
 
     socket.on('visitor_register', (data: {

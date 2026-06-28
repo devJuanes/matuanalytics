@@ -4,31 +4,41 @@ import { getDatabase } from '../firebase.js'
 import { resolveGeo } from '../services/geoip.js'
 import { getClientIp } from '../utils/ip.js'
 import { activeUsersManager, notifyActiveUsersChange } from '../socket/index.js'
-import type { ProjectRecord } from './projects.js'
+import { findProjectByTrackingId } from '../services/projectLookup.js'
 
 const router = Router()
 const PAGEVIEW_DEDUPE_MS = 30_000
 
 router.use((_req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
   next()
 })
 
 router.options('/track', (_req, res) => res.sendStatus(204))
 router.options('/heartbeat', (_req, res) => res.sendStatus(204))
+router.options('/live/:siteId', (_req, res) => res.sendStatus(204))
 
-async function findProjectByTrackingId(trackingId: string): Promise<{ id: string; project: ProjectRecord } | null> {
-  const db = await getDatabase()
-  const snap = await db.ref('projects').once('value')
-  const projects = snap.val() as Record<string, ProjectRecord> | null
-  if (!projects) return null
+router.get('/live/:siteId', async (req: Request, res: Response) => {
+  try {
+    const found = await findProjectByTrackingId(req.params.siteId as string)
+    if (!found) {
+      res.status(404).json({ error: 'Project not found' })
+      return
+    }
 
-  const entry = Object.entries(projects).find(([, p]) => p.trackingId === trackingId)
-  if (!entry) return null
-  return { id: entry[0], project: entry[1] }
-}
+    res.json({
+      projectId: found.id,
+      siteId: found.project.trackingId,
+      activeUsers: activeUsersManager.getCount(found.id),
+      lastEvent: 'heartbeat',
+    })
+  } catch (error) {
+    console.error('Device live error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+})
 
 router.post('/track', async (req: Request, res: Response) => {
   try {

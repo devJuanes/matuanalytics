@@ -46,7 +46,8 @@ app.use((req, res, next) => {
   const isPublicTracking =
     req.path === '/tracker.js' ||
     req.path === '/api/track' ||
-    req.path === '/api/heartbeat'
+    req.path === '/api/heartbeat' ||
+    req.path.startsWith('/api/live/')
   if (isPublicTracking) {
     return publicTrackingCors(req, res, next)
   }

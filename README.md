@@ -75,13 +75,31 @@ socket.emit('join_dashboard', projectId)
 socket.on('active_users_update', (data) => { ... })
 ```
 
-### ESP32
+### ESP32 / Arduino (display + buzzer)
+
+Firmware en `hardware/esp32-live-counter/`. Usa el **Tracking ID** (`MA-...`), no el UUID interno.
+
+```cpp
+// config.h
+#define SITE_ID "MA-A37CA49956E8"
+```
 
 ```javascript
-socket.emit('join_esp32', projectId)
+// Socket.IO — opción A: Tracking ID (recomendado para hardware)
+socket.emit('join_esp32_site', 'MA-A37CA49956E8')
 socket.on('active_users_update', (data) => {
   // { projectId, activeUsers, lastEvent }
 })
+
+// Opción B: projectId interno (UUID de Firebase)
+socket.emit('join_esp32', projectId)
+```
+
+REST público (sin auth, para pruebas):
+
+```
+GET /api/live/MA-A37CA49956E8
+→ { activeUsers, siteId, projectId, lastEvent }
 ```
 
 ## Firebase (proyecto: matuanalytics-37f2f)
