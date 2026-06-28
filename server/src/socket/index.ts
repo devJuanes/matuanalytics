@@ -1,5 +1,20 @@
 import type { Server, Socket } from 'socket.io'
 
+let ioServer: Server | null = null
+
+export function attachSocketServer(io: Server) {
+  ioServer = io
+}
+
+export function notifyActiveUsersChange(
+  projectId: string,
+  lastEvent: ActiveUsersPayload['lastEvent'],
+) {
+  if (ioServer) {
+    broadcastActiveUsers(ioServer, projectId, lastEvent)
+  }
+}
+
 export interface ActiveVisitor {
   visitorId: string
   sessionId: string
@@ -85,6 +100,42 @@ class ActiveUsersManager {
   getVisitors(projectId: string): ActiveVisitor[] {
     this.purgeStale(projectId)
     return Array.from(this.projects.get(projectId)?.values() || [])
+  }
+
+  getVisitor(projectId: string, sessionId: string): ActiveVisitor | undefined {
+    this.purgeStale(projectId)
+    return this.projects.get(projectId)?.get(sessionId)
+  }
+
+  upsertFromRest(
+    projectId: string,
+    data: Omit<ActiveVisitor, 'socketId' | 'connectedAt' | 'lastHeartbeat'> & {
+      sessionStartedAt?: number
+    },
+  ) {
+    this.purgeStale(projectId)
+    const existing = this.getVisitor(projectId, data.sessionId)
+    const sessionStart = data.sessionStartedAt ?? existing?.connectedAt ?? Date.now()
+    const visitor: ActiveVisitor = {
+      visitorId: data.visitorId,
+      sessionId: data.sessionId,
+      socketId: existing && !existing.socketId.startsWith('rest:') ? existing.socketId : `rest:${data.sessionId}`,
+      pageUrl: data.pageUrl,
+      pageTitle: data.pageTitle,
+      browser: data.browser,
+      os: data.os,
+      device: data.device,
+      country: data.country,
+      countryCode: data.countryCode,
+      city: data.city,
+      lat: data.lat,
+      lng: data.lng,
+      durationSeconds: Math.floor((Date.now() - sessionStart) / 1000),
+      connectedAt: sessionStart,
+      lastHeartbeat: Date.now(),
+    }
+    this.addVisitor(projectId, visitor)
+    return visitor
   }
 
   getPayload(
@@ -228,6 +279,9 @@ export function registerSocketHandlers(io: Server) {
       const projectId = socket.data.projectId as string | undefined
       const sessionId = socket.data.sessionId as string | undefined
       if (!projectId || !sessionId || socket.data.role !== 'visitor') return
+
+      const current = activeUsersManager.getVisitor(projectId, sessionId)
+      if (!current || current.socketId !== socket.id) return
 
       const visitor = activeUsersManager.removeVisitor(projectId, sessionId)
       if (visitor) {

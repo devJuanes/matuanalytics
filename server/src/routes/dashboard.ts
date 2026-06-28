@@ -44,6 +44,34 @@ async function loadProjectData(projectId: string, userId: string) {
   return { project, pageviews, visitors, sessions }
 }
 
+router.get('/:projectId/live', async (req: Request, res: Response) => {
+  try {
+    const { projectId } = req.params
+    const db = await getDatabase()
+    const projectSnap = await db.ref(`projects/${projectId}`).once('value')
+    if (!projectSnap.exists()) {
+      res.status(404).json({ error: 'Project not found' })
+      return
+    }
+    const project = projectSnap.val() as unknown as ProjectRecord
+    if (project.userId !== req.user!.userId) {
+      res.status(403).json({ error: 'Forbidden' })
+      return
+    }
+
+    const visitors = activeUsersManager.getVisitors(projectId as string)
+    res.json({
+      projectId,
+      activeUsers: activeUsersManager.getCount(projectId as string),
+      lastEvent: 'heartbeat' as const,
+      visitors,
+    })
+  } catch (error) {
+    console.error('Live dashboard error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
 router.get('/:projectId', async (req: Request, res: Response) => {
   try {
     const { projectId } = req.params

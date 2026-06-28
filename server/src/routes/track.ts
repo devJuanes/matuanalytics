@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../firebase.js'
 import { resolveGeo } from '../services/geoip.js'
 import { getClientIp } from '../utils/ip.js'
+import { activeUsersManager, notifyActiveUsersChange } from '../socket/index.js'
 import type { ProjectRecord } from './projects.js'
 
 const router = Router()
@@ -120,6 +121,23 @@ router.post('/track', async (req: Request, res: Response) => {
       ...geoFields,
     })
 
+    activeUsersManager.upsertFromRest(projectId, {
+      visitorId,
+      sessionId,
+      pageUrl: url || '',
+      pageTitle: title || '',
+      browser: browser || 'Unknown',
+      os: os || 'Unknown',
+      device: device || 'Unknown',
+      country: geoFields.country,
+      countryCode: geoFields.countryCode,
+      city: geoFields.city,
+      lat: geoFields.lat,
+      lng: geoFields.lng,
+      sessionStartedAt: startedAt,
+    })
+    notifyActiveUsersChange(projectId, 'visitor_connected')
+
     let pageviewId: string | null = null
     if (!shouldSkipPageview) {
       pageviewId = uuidv4()
@@ -159,7 +177,7 @@ router.post('/track', async (req: Request, res: Response) => {
 
 router.post('/heartbeat', async (req: Request, res: Response) => {
   try {
-    const { siteId, sessionId, visitorId, url, title, duration } = req.body
+    const { siteId, sessionId, visitorId, url, title, duration, browser, os, device } = req.body
 
     if (!siteId || !sessionId) {
       res.status(400).json({ error: 'siteId and sessionId are required' })
@@ -175,9 +193,16 @@ router.post('/heartbeat', async (req: Request, res: Response) => {
     const { id: projectId } = found
     const now = Date.now()
     const db = await getDatabase()
+    const ip = getClientIp(req)
+    const geo = await resolveGeo(ip)
 
     const sessionSnap = await db.ref(`sessions/${projectId}/${sessionId}`).once('value')
-    const session = sessionSnap.val() as { startedAt?: number } | null
+    const session = sessionSnap.val() as {
+      startedAt?: number
+      browser?: string
+      os?: string
+      device?: string
+    } | null
     const startedAt = session?.startedAt || now
     const durationSeconds = duration ?? Math.floor((now - startedAt) / 1000)
 
@@ -192,10 +217,46 @@ router.post('/heartbeat', async (req: Request, res: Response) => {
       await db.ref(`visitors/${projectId}/${visitorId}`).update({
         lastSeen: now,
         totalDurationSeconds: durationSeconds,
+        country: geo.country,
+        countryCode: geo.countryCode,
+        city: geo.city,
+        region: geo.region,
+        lat: geo.lat,
+        lng: geo.lng,
+        lastIp: ip,
       })
     }
 
-    res.json({ success: true, durationSeconds })
+    activeUsersManager.upsertFromRest(projectId, {
+      visitorId: visitorId || 'unknown',
+      sessionId,
+      pageUrl: url || '',
+      pageTitle: title || '',
+      browser: browser || session?.browser || 'Unknown',
+      os: os || session?.os || 'Unknown',
+      device: device || session?.device || 'Unknown',
+      country: geo.country,
+      countryCode: geo.countryCode,
+      city: geo.city,
+      lat: geo.lat,
+      lng: geo.lng,
+      durationSeconds,
+      sessionStartedAt: startedAt,
+    })
+    notifyActiveUsersChange(projectId, 'heartbeat')
+
+    res.json({
+      success: true,
+      durationSeconds,
+      activeUsers: activeUsersManager.getCount(projectId),
+      geo: {
+        country: geo.country,
+        countryCode: geo.countryCode,
+        city: geo.city,
+        lat: geo.lat,
+        lng: geo.lng,
+      },
+    })
   } catch (error) {
     console.error('Heartbeat error:', error)
     res.status(500).json({ error: 'Internal server error' })

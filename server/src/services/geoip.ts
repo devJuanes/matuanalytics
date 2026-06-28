@@ -41,6 +41,29 @@ async function fetchJson<T>(url: string, timeoutMs = 4000): Promise<T | null> {
   }
 }
 
+async function resolveViaIpApiCo(ip: string): Promise<GeoLocation | null> {
+  const data = await fetchJson<{
+    error?: boolean | string
+    country_name?: string
+    country_code?: string
+    city?: string
+    region?: string
+    latitude?: number
+    longitude?: number
+  }>(`https://ipapi.co/${encodeURIComponent(ip)}/json/`)
+
+  if (!data || data.error) return null
+
+  return {
+    country: data.country_name || 'Desconocido',
+    countryCode: data.country_code || 'XX',
+    city: data.city || '',
+    region: data.region || '',
+    lat: data.latitude || 0,
+    lng: data.longitude || 0,
+  }
+}
+
 async function resolveViaIpApi(ip: string): Promise<GeoLocation | null> {
   const data = await fetchJson<{
     status: string
@@ -98,7 +121,7 @@ export async function resolveGeo(ip: string): Promise<GeoLocation> {
     if (cached) return cached
   }
 
-  const providers = [resolveViaIpApi, resolveViaIpWho]
+  const providers = [resolveViaIpWho, resolveViaIpApiCo, resolveViaIpApi]
   for (const provider of providers) {
     const geo = await provider(ip)
     if (geo && geo.countryCode !== 'XX') {

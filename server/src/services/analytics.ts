@@ -379,7 +379,7 @@ export function buildDashboardAnalytics(
     .slice(0, 10)
 
   const liveMapPoints = activeVisitors
-    .filter((v) => v.lat && v.lng)
+    .filter((v) => v.lat != null && v.lng != null && !(v.lat === 0 && v.lng === 0))
     .map((v) => ({
       lat: v.lat!,
       lng: v.lng!,

@@ -6,7 +6,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { config } from './config.js'
 import { initFirebaseAdmin, getDatabase } from './firebase.js'
-import { registerSocketHandlers } from './socket/index.js'
+import { attachSocketServer, registerSocketHandlers } from './socket/index.js'
 import authRoutes from './routes/auth.js'
 import projectsRoutes from './routes/projects.js'
 import trackRoutes from './routes/track.js'
@@ -75,6 +75,7 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok', service: 'MatuAnalytics API' })
 })
 
+attachSocketServer(io)
 registerSocketHandlers(io)
 
 async function start() {

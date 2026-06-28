@@ -258,6 +258,9 @@
         url: current.url,
         title: current.title,
         duration: duration,
+        browser: current.browser,
+        os: current.os,
+        device: current.device,
       });
       if (socket && socket.connected) {
         socket.emit('heartbeat', {
