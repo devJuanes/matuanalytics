@@ -14,12 +14,16 @@ Edita al inicio del `.ino`:
 #define SITE_ID "MA-A37CA49956E8"
 ```
 
-## Comportamiento
+## Buzzer
 
-- Pantalla muestra **0** si no hay nadie conectado
-- **2 bips** cuando sube el número de conectados
-- Consulta la API cada 3 segundos
-- El display se refresca siempre (como tu `main.c` original)
+| Evento | Sonido |
+|--------|--------|
+| Sube conectados | 2 tonos **ascendentes** (900 → 1400 Hz) |
+| Baja conectados | 2 tonos **descendentes** (1200 → 650 Hz) |
+
+## Display estable
+
+El refresco va por **timer** (cada 1.5 ms), independiente del WiFi. Sin parpadeo ni cambios de brillo.
 
 ## Cableado 5641AS
 

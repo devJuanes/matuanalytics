@@ -1,8 +1,8 @@
 /**
  * MatuAnalytics — ESP32 DevKit + display 5641AS (cátodo común)
  *
- * Muestra usuarios en vivo (0 si no hay nadie).
- * 2 bips cuando entra alguien nuevo.
+ * Display fijo (sin parpadeo) — refresco por timer independiente del WiFi.
+ * Suben conectados: 2 tonos ascendentes. Bajan: 2 tonos descendentes.
  *
  * Cableado 5641AS → ESP32:
  *   1=E→26  2=D→27  3=DP(suelto)  4=C→14  5=G→32  6=D4→4
@@ -23,6 +23,7 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <SevSeg.h>
+#include <esp_timer.h>
 
 SevSeg sevseg;
 
@@ -32,6 +33,7 @@ byte numDigits = 4;
 byte digitPins[] = {19, 18, 5, 4};
 byte segmentPins[] = {13, 12, 14, 27, 26, 25, 32, 0};
 
+volatile int displayValue = 0;
 int activeUsers = 0;
 int lastActiveUsers = 0;
 
@@ -39,53 +41,81 @@ unsigned long lastPoll = 0;
 unsigned long lastWifiTry = 0;
 bool wifiStarted = false;
 
-// Buzzer: 2 bips sin bloquear el display
-byte beepsRemaining = 0;
-byte beepPhase = 0; // 0=idle 1=on 2=gap
-unsigned long buzzerT = 0;
-const int BEEP_ON_MS = 80;
-const int BEEP_GAP_MS = 100;
+esp_timer_handle_t displayTimer = nullptr;
+portMUX_TYPE displayMux = portMUX_INITIALIZER_UNLOCKED;
 
-void refreshDisplayNow() {
-  sevseg.setNumber(activeUsers);
+// Melodía buzzer (no bloqueante)
+const int FREQ_UP_1 = 900;
+const int FREQ_UP_2 = 1400;
+const int FREQ_DOWN_1 = 1200;
+const int FREQ_DOWN_2 = 650;
+const int TONE_MS = 110;
+const int GAP_MS = 90;
+
+int melodyNotes[2];
+byte melodyLen = 0;
+byte melodyStep = 0;
+byte melodyPhase = 0; // 0=idle 1=sonando 2=pausa
+unsigned long melodyT = 0;
+
+void onDisplayTimer(void *arg) {
+  (void)arg;
+  portENTER_CRITICAL(&displayMux);
   sevseg.refreshDisplay();
+  portEXIT_CRITICAL(&displayMux);
 }
 
-void waitWithDisplay(unsigned long ms) {
-  unsigned long t0 = millis();
-  while (millis() - t0 < ms) {
-    refreshDisplayNow();
-  }
+void setDisplayValue(int value) {
+  if (value < 0) value = 0;
+  if (value > 9999) value = 9999;
+  if (value == displayValue) return;
+
+  portENTER_CRITICAL(&displayMux);
+  displayValue = value;
+  sevseg.setNumber(value);
+  portEXIT_CRITICAL(&displayMux);
 }
 
-void startDoubleBeep() {
-  beepsRemaining = 2;
-  beepPhase = 1;
-  digitalWrite(buzzerPin, HIGH);
-  buzzerT = millis();
+void startMelody(int f1, int f2) {
+  melodyNotes[0] = f1;
+  melodyNotes[1] = f2;
+  melodyLen = 2;
+  melodyStep = 0;
+  melodyPhase = 1;
+  melodyT = millis();
+  tone(buzzerPin, melodyNotes[0], TONE_MS);
 }
 
-void serviceBuzzer() {
-  if (beepsRemaining == 0) return;
+void startMelodyUp() {
+  startMelody(FREQ_UP_1, FREQ_UP_2);
+}
+
+void startMelodyDown() {
+  startMelody(FREQ_DOWN_1, FREQ_DOWN_2);
+}
+
+void serviceMelody() {
+  if (melodyPhase == 0) return;
 
   unsigned long now = millis();
 
-  if (beepPhase == 1 && now - buzzerT >= BEEP_ON_MS) {
-    digitalWrite(buzzerPin, LOW);
-    beepPhase = 2;
-    buzzerT = now;
+  if (melodyPhase == 1 && now - melodyT >= TONE_MS) {
+    noTone(buzzerPin);
+    melodyPhase = 2;
+    melodyT = now;
     return;
   }
 
-  if (beepPhase == 2 && now - buzzerT >= BEEP_GAP_MS) {
-    beepsRemaining--;
-    if (beepsRemaining > 0) {
-      digitalWrite(buzzerPin, HIGH);
-      beepPhase = 1;
-      buzzerT = now;
-    } else {
-      beepPhase = 0;
+  if (melodyPhase == 2 && now - melodyT >= GAP_MS) {
+    melodyStep++;
+    if (melodyStep >= melodyLen) {
+      melodyPhase = 0;
+      melodyLen = 0;
+      return;
     }
+    melodyPhase = 1;
+    melodyT = now;
+    tone(buzzerPin, melodyNotes[melodyStep], TONE_MS);
   }
 }
 
@@ -102,11 +132,14 @@ void onCountUpdate(int users) {
   if (users > 9999) users = 9999;
 
   if (users > lastActiveUsers) {
-    startDoubleBeep();
+    startMelodyUp();
+  } else if (users < lastActiveUsers) {
+    startMelodyDown();
   }
 
   lastActiveUsers = users;
   activeUsers = users;
+  setDisplayValue(users);
 }
 
 bool fetchLiveCount() {
@@ -114,7 +147,7 @@ bool fetchLiveCount() {
 
   WiFiClientSecure client;
   client.setInsecure();
-  client.setTimeout(5000);
+  client.setTimeout(4000);
 
   if (!client.connect(API_HOST, 443)) {
     Serial.println("[api] sin conexion SSL");
@@ -130,13 +163,14 @@ bool fetchLiveCount() {
   client.println();
 
   String response;
+  response.reserve(512);
   unsigned long t0 = millis();
   while (client.connected() || client.available()) {
     while (client.available()) {
       response += (char)client.read();
     }
-    refreshDisplayNow();
-    if (millis() - t0 > 6000) break;
+    if (millis() - t0 > 5000) break;
+    yield();
   }
   client.stop();
 
@@ -178,50 +212,48 @@ void serviceWifi() {
   wifiStarted = false;
 }
 
+void startDisplayTimer() {
+  esp_timer_create_args_t args = {};
+  args.callback = &onDisplayTimer;
+  args.name = "sevseg";
+  args.dispatch_method = ESP_TIMER_TASK;
+
+  esp_timer_create(&args, &displayTimer);
+  // 1.5 ms → multiplexado estable, sin parpadeo ni cambios de brillo
+  esp_timer_start_periodic(displayTimer, 1500);
+}
+
 void setup() {
   Serial.begin(115200);
 
   pinMode(buzzerPin, OUTPUT);
   digitalWrite(buzzerPin, LOW);
 
-  byte hardwareConfig = COMMON_CATHODE;
-  bool resistorsOnSegments = true;
-  bool updateWithDelays = false;
-  bool leadingZeros = false;
-  bool disableDecPoint = true;
-
   sevseg.begin(
-    hardwareConfig,
+    COMMON_CATHODE,
     numDigits,
     digitPins,
     segmentPins,
-    resistorsOnSegments,
-    updateWithDelays,
-    leadingZeros,
-    disableDecPoint
+    true,   // resistorsOnSegments
+    false,  // updateWithDelays
+    false,  // leadingZeros
+    true    // disableDecPoint
   );
   sevseg.setBrightness(90);
 
   activeUsers = 0;
   lastActiveUsers = 0;
-  sevseg.setNumber(0);
+  setDisplayValue(0);
 
-  // Prueba rápida display + buzzer al encender (como tu main.c)
-  for (int i = 0; i < 500; i++) {
-    refreshDisplayNow();
-  }
-  startDoubleBeep();
+  startDisplayTimer();
 }
 
 void loop() {
-  serviceBuzzer();
+  serviceMelody();
   serviceWifi();
 
   if (WiFi.status() == WL_CONNECTED && millis() - lastPoll >= POLL_MS) {
     lastPoll = millis();
     fetchLiveCount();
   }
-
-  // Igual que tu main.c: siempre refrescar el display
-  refreshDisplayNow();
 }
